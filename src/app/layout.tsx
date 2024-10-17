@@ -1,44 +1,34 @@
-import type { Metadata } from "next";
-import { DM_Sans } from "next/font/google";
-import "./globals.css";
-import { ThemeProvider } from "@/providers/theme-provider";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-import {
-  ClerkProvider,
-  SignInButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@clerk/nextjs";
+const isTenantRoute = createRouteMatcher([
+  "/organization-selector(.*)",
+  "/orgid/(.*)",
+]);
 
-const font = DM_Sans({ subsets: ["latin"] });
+const isTenantAdminRoute = createRouteMatcher([
+  "/orgId/(.*)/memberships",
+  "/orgId/(.*)/domain",
+]);
 
-export const metadata: Metadata = {
-  title: "Vectorshift",
-  description: "Automate Your Work With Vectorshift",
+export default clerkMiddleware((auth, req) => {
+  // Restrict admin routes to users with specific permissions
+  if (isTenantAdminRoute(req)) {
+    auth().protect((has) => {
+      return (
+        has({ permission: "org:sys_memberships:manage" }) ||
+        has({ permission: "org:sys_domains_manage" })
+      );
+    });
+  }
+  // Restrict organization routes to signed in users
+  if (isTenantRoute(req)) auth().protect();
+});
+
+export const config = {
+  matcher: [
+    // Skip Next.js internals and all static files, unless found in search params
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // Always run for API routes
+    "/(api|trpc)(.*)",
+  ],
 };
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <ClerkProvider
-      publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-    >
-      <html lang="en">
-        <body className={font.className}>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="dark"
-            enableSystem
-            disableTransitionOnChange
-          >
-            {children}
-          </ThemeProvider>
-        </body>
-      </html>
-    </ClerkProvider>
-  );
-}
